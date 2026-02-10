@@ -26,7 +26,7 @@ See "diagram.jpg" for details. Also there are several other good option sets, on
 
 5 - SOTAv2 (new). This method has same K=1.15 but uses only two groups of kangaroos and the symmetry of the elliptic curve.
 
-5 - SOTA+. This method is the same as SOTA, but also uses cheap second point. 
+6 - SOTA+. This method is the same as SOTA, but also uses cheap second point. 
 When we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same. 
 If inversion calculation takes a lot of time, this second point is cheap for us and we can use it to improve K. 
 Using cheap point costs only (1MUL+1SQR)/2. K is approximately 1.02 for this method (assuming cheap point is free and not counted as 1op). 
