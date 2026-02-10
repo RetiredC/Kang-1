@@ -19,10 +19,12 @@ Another trick is to reduce the range for wild kangaroos.
 In practice, K is approximately 1.3 for this method.
 The main issue with this method is that the kangaroos loop continuously.
 
-4 - SOTA. This method uses three groups of kangaroos and the symmetry of the elliptic curve.
+4 - SOTAv1 (check old versions to see it). This method uses three groups of kangaroos and the symmetry of the elliptic curve.
 In practice, K is approximately 1.15 for this method. The main issue is the same as in the Mirror method.
 I couldn’t find any papers about this method, so let's assume that I invented it :)
 See "diagram.jpg" for details. Also there are several other good option sets, one of them is used in the application by default, check the sources. 
+
+5 - SOTAv2 (new). This method has same K=1.15 but uses only two groups of kangaroos and the symmetry of the elliptic curve.
 
 5 - SOTA+. This method is the same as SOTA, but also uses cheap second point. 
 When we calculate "NextPoint = PreviousPoint + JumpPoint" we can also quickly calculate "PreviousPoint - JumpPoint" because inversion is the same. 
@@ -35,4 +37,6 @@ Again, I couldn’t find any papers about this method applied to Kangaroo, so le
 Important note: this software handles kangaroo looping in a very simple way, this method is bad for high ranges. 
 Next part will demonstrate a good way to handle loops.
 
-![sota diagram](diagram.jpg)
+![sota diagram](sota1.jpg)
+
+![sota diagram](sota2.jpg)

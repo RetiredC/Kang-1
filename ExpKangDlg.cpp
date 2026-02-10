@@ -148,6 +148,10 @@ EcPoint Pnt_NegHalfRange;
 EcInt Int_HalfRange;
 EcInt Int_TameOffset; //for 3-way only
 EcPoint Pnt_TameOffset;
+
+EcInt x32;
+EcPoint Pntx32;
+
 Ec ec;
 
 volatile long ThrCnt;
@@ -649,7 +653,7 @@ u32 __stdcall thr_proc_mirror(void* data)
 
 EcInt WildRange;
 EcInt TameRange;
-EcInt TameOfs;
+
 
 bool Collision_SOTA(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, bool IsNeg)
 {
@@ -660,15 +664,15 @@ bool Collision_SOTA(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, 
 		EcInt pk = t;
 		pk.Sub(w);
 		EcInt sv = pk;
-		pk.Add(Int_HalfRange);
 		EcPoint P = ec.MultiplyG(pk);
 		if (P.IsEqual(pnt))
 			return true;
 		pk = sv;
 		pk.Neg();
-		pk.Add(Int_HalfRange);
 		P = ec.MultiplyG(pk);
-		return P.IsEqual(pnt);
+		if (P.IsEqual(pnt))
+			return true;
+		return false;
 	}
 	else
 	{
@@ -678,13 +682,11 @@ bool Collision_SOTA(EcPoint& pnt, EcInt t, int TameType, EcInt w, int WildType, 
 			pk.Neg();
 		pk.ShiftRight(1);
 		EcInt sv = pk;
-		pk.Add(Int_HalfRange);
 		EcPoint P = ec.MultiplyG(pk);
 		if (P.IsEqual(pnt))
 			return true;
 		pk = sv;
 		pk.Neg();
-		pk.Add(Int_HalfRange);
 		P = ec.MultiplyG(pk);
 		return P.IsEqual(pnt);
 	}
@@ -717,10 +719,7 @@ u32 __stdcall thr_proc_sota(void* data)
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			if (i < KANG_CNT / 3)
-			{
 				kangs[i].dist.RndMax(TameRange);
-				kangs[i].dist.Add(TameOfs);
-			}
 			else
 			{
 				kangs[i].dist.RndMax(WildRange);
@@ -728,20 +727,20 @@ u32 __stdcall thr_proc_sota(void* data)
 			}
 		}
 
+		KToSolve.Add(x32); //add x32 just to improve K for range edges
 		PointToSolve = ec.MultiplyG(KToSolve);
-		EcPoint Pnt1 = ec.AddPoints(PointToSolve, Pnt_NegHalfRange);
-		EcPoint Pnt2 = Pnt1;
-		Pnt2.y.NegModP();
+
+		EcPoint PntWild = PointToSolve; // ec.AddPoints(PointToSolve, Pntx32); //just to improve K for range edges
+		PntWild.y.NegModP(); //negate wild point to be able to place kangs with positive offsets
+
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			kangs[i].p = ec.MultiplyG(kangs[i].dist);
 			kangs[i].iter = 0;
 		}
 
-		for (int i = KANG_CNT / 3; i < 2 * KANG_CNT / 3; i++)
-			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
-		for (int i = 2 * KANG_CNT / 3; i < KANG_CNT; i++)
-			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
+		for (int i = KANG_CNT / 3; i < KANG_CNT; i++)
+			kangs[i].p = ec.AddPoints(kangs[i].p, PntWild);
 
 		bool found = false;
 		while (!found)
@@ -763,10 +762,7 @@ u32 __stdcall thr_proc_sota(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-					{
 						kangs[i].dist.RndMax(TameRange);
-						kangs[i].dist.Add(TameOfs);
-					}
 					else
 					{
 						kangs[i].dist.RndMax(WildRange);
@@ -776,12 +772,8 @@ u32 __stdcall thr_proc_sota(void* data)
 					kangs[i].iter = 0;
 					kangs[i].p = ec.MultiplyG(kangs[i].dist);
 					if (i >= KANG_CNT / 3)
-					{
-						if (i < 2 * KANG_CNT / 3)
-							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
-						else
-							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
-					}
+						kangs[i].p = ec.AddPoints(kangs[i].p, PntWild);
+
 					memset(&old[OLD_LEN * i], 0, 8 * OLD_LEN);
 					continue;
 				}
@@ -811,10 +803,7 @@ u32 __stdcall thr_proc_sota(void* data)
 				if (i < KANG_CNT / 3)
 					nrec.type = TAME;
 				else
-					if (i < 2 * KANG_CNT / 3)
-						nrec.type = WILD;
-					else
-						nrec.type = WILD2;
+					nrec.type = WILD;
 
 				TDB_Rec* pref = (TDB_Rec*)db->FindOrAddDataBlock((BYTE*)&nrec, sizeof(nrec));
 				if (pref)
@@ -855,6 +844,7 @@ u32 __stdcall thr_proc_sota(void* data)
 					bool res = Collision_SOTA(PointToSolve, t, TameType, w, WildType, false) || Collision_SOTA(PointToSolve, t, TameType, w, WildType, true);
 					if (!res)
 					{
+						res = Collision_SOTA(PointToSolve, t, TameType, w, WildType, false) || Collision_SOTA(PointToSolve, t, TameType, w, WildType, true);
 						//bool w12 = ((pref->type == WILD) && (nrec.type == WILD2)) || ((pref->type == WILD2) && (nrec.type == WILD));
 						//if (w12) //in rare cases WILD and WILD2 can collide in mirror, in this case there is no way to find K
 						//	ToLog("W1 and W2 collided in mirror");
@@ -871,6 +861,7 @@ u32 __stdcall thr_proc_sota(void* data)
 			}
 		}
 #ifdef INTERVAL_STATS
+		KToSolve.Sub(x32);
 		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
 		int int_ind = (int)KToSolve.data[0];
 		int_cnt[int_ind]++;
@@ -920,7 +911,6 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 			if (i < KANG_CNT / 3)
 			{
 				kangs[i].dist.RndMax(TameRange);
-				kangs[i].dist.Add(TameOfs);
 			}
 			else
 			{
@@ -929,20 +919,20 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 			}
 		}
 
+		KToSolve.Add(x32); //add x32 just to improve K for range edges
 		PointToSolve = ec.MultiplyG(KToSolve);
-		EcPoint Pnt1 = ec.AddPoints(PointToSolve, Pnt_NegHalfRange);
-		EcPoint Pnt2 = Pnt1;
-		Pnt2.y.NegModP();
+
+		EcPoint PntWild = PointToSolve; // ec.AddPoints(PointToSolve, Pntx32); //just to improve K for range edges
+		PntWild.y.NegModP(); //negate wild point to be able to place kangs with positive offsets
+
 		for (int i = 0; i < KANG_CNT; i++)
 		{
 			kangs[i].p = ec.MultiplyG(kangs[i].dist);
 			kangs[i].iter = 0;
 		}
 
-		for (int i = KANG_CNT / 3; i < 2 * KANG_CNT / 3; i++)
-			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
-		for (int i = 2 * KANG_CNT / 3; i < KANG_CNT; i++)
-			kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
+		for (int i = KANG_CNT / 3; i < KANG_CNT; i++)
+			kangs[i].p = ec.AddPoints(kangs[i].p, PntWild);
 
 		bool found = false;
 		while (!found)
@@ -964,10 +954,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				if (cycled)
 				{
 					if (i < KANG_CNT / 3)
-					{
 						kangs[i].dist.RndMax(TameRange);
-						kangs[i].dist.Add(TameOfs);
-					}
 					else
 					{
 						kangs[i].dist.RndMax(WildRange);
@@ -977,12 +964,8 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 					kangs[i].iter = 0;
 					kangs[i].p = ec.MultiplyG(kangs[i].dist);
 					if (i >= KANG_CNT / 3)
-					{
-						if (i < 2 * KANG_CNT / 3)
-							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt1);
-						else
-							kangs[i].p = ec.AddPoints(kangs[i].p, Pnt2);
-					}
+						kangs[i].p = ec.AddPoints(kangs[i].p, PntWild);
+
 					memset(&old[OLD_LEN * i], 0, 8 * OLD_LEN);
 					continue;
 				}
@@ -1076,10 +1059,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 				if (i < KANG_CNT / 3)
 					nrec.type = TAME;
 				else
-					if (i < 2 * KANG_CNT / 3)
-						nrec.type = WILD;
-					else
-						nrec.type = WILD2;
+					nrec.type = WILD;
 
 				TDB_Rec* pref = (TDB_Rec*)db->FindOrAddDataBlock((BYTE*)&nrec, sizeof(nrec));
 				if (pref)
@@ -1136,6 +1116,7 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 			}
 		}
 #ifdef INTERVAL_STATS
+		KToSolve.Sub(x32);
 		KToSolve.ShiftRight(RANGE_BITS - INTERVAL_BITS);
 		int int_ind = (int)KToSolve.data[0];
 		int_cnt[int_ind]++;
@@ -1160,20 +1141,17 @@ u32 __stdcall thr_proc_sota_plus(void* data)
 #define METHOD_SOTA_PLUS	4
 char* names[] = { "Classic", "3-Way", "Mirror", "SOTA", "SOTA+" };
 
-void SetSotaParams(int wr, int tr, int tofs)
+void SetSotaParams(int wr, int tr)
 {
-	EcInt x32;
 	x32.Set(1);
 	x32.ShiftLeft(RANGE_BITS - 5);
+	Pntx32 = ec.MultiplyG(x32);
 	WildRange.Set(0);
 	for (int i = 0; i < wr; i++)
 		WildRange.Add(x32);
 	TameRange.Set(0);
 	for (int i = 0; i < tr; i++)
 		TameRange.Add(x32);
-	TameOfs.Set(0);
-	for (int i = 0; i < tofs; i++)
-		TameOfs.Add(x32);
 }
 
 void Prepare(int Method)
@@ -1211,11 +1189,7 @@ void Prepare(int Method)
 	Pnt_TameOffset = ec.MultiplyG(Int_TameOffset);
 
 	if ((Method == METHOD_SOTA) || (Method == METHOD_SOTA_PLUS))
-	{
-	//	SetSotaParams(16, 2, 0); //old parameters (diagram.jpg), K is not good at the edges
-		SetSotaParams(6, 1, 10); //optimized parameters, K is smoother, define INTERVAL_STATS to see the difference
-		//there are several other good option sets, but all of them give same K
-	}
+		SetSotaParams(32 + 2, 1); //add 2 just to improve K for range edges
 }
 
 void TestKangaroo(int Method)
